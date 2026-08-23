@@ -19,7 +19,9 @@
 
 **職責**：任務執行前，先確認 Figma Library 是否已有可用素材，避免每次重新生成造成的風格漂移。
 
-**核心工具**：`search_design_system`
+**核心工具**：`get_libraries`（取得 library key）→ `search_design_system`（必填 `fileKey`）
+
+⚠ `search_design_system` **每次查詢只能表達一個搜尋意圖**，不做 OR 語意。要找「Logo、人物素材、16:9 版型」必須拆成三次呼叫，不能合併成一句。可用 `includeLibraryKeys` 把搜尋限定在特定 Library。
 
 **判斷邏輯**：
 
@@ -27,7 +29,9 @@
 |------|------|
 | 完全符合需求 | Reuse — 直接引用既有素材 |
 | 部分符合，需微調 | Modify — 在既有基礎上修改 |
-| 完全無對應素材 | Generate — 呼叫 Figma Make 生成新素材，並歸入 Library |
+| 完全無對應素材 | Generate — 呼叫 Figma Make 生成新素材，**再搬進 Figma Design 檔案**後歸入 Library |
+
+> ⚠ Figma Make 檔案（`/make/`）幾乎唯讀：只有 `get_design_context` 支援它，`get_variable_defs`／`download_assets`／`use_figma` 全都不支援。生成的素材停在 Make 裡，Agent 就無法檢索與改寫 —— 必須先搬進 Design 檔案。
 
 ---
 
@@ -48,10 +52,12 @@
    | AI 概念／趨勢盤點 | `tech-style` |
    | 步驟教學／SOP | `stepclear-tutorial-glass` |
    | 多分類清單／工具盤點 | `penta-glass-listcard` |
+   | 知識點懶人包／吉祥物教學圖卡 | `graph-infographic-brand` |
+   | 電商產品介面／商品頁 | `premium-commerce-ui-brand` |
 
 5. 透過 `use_figma` 組版寫回 Figma
 
-**輸出**：Figma 投影片檔案 → 匯出 PPTX／PDF／PNG
+**輸出**：Figma 投影片檔案 → `download_assets` 匯出 PNG／PDF（PPTX 由 Figma 介面匯出）
 
 ---
 
@@ -65,8 +71,14 @@
 3. 呼叫 `get_motion_context` 取得既有動畫語言（keyframe／easing）
 4. 套用 Motion Skill 定義的轉場規則
 5. 產生動畫序列並寫回 Figma
+6. 以 `export_video` 算繪輸出
 
-**輸出**：Figma 動畫畫面 → 匯出 MP4／Shorts
+**輸出**：Figma 動畫畫面 → `export_video` 匯出 MP4
+
+⚠ `export_video` 的三個硬限制：
+- **只出 MP4**，不支援 GIF 與動畫 SVG
+- `nodeId` 必須是擁有 timeline 的**頂層 frame**（Slides 裡是投影片本身，不是投影片內的圖層）。動畫掛在子節點時，用 `get_motion_context` 回傳的 `timelineCohorts.rootNodeId` 往上找
+- **非同步作業**：未在時限內算完會回 `jobId` 與 `status: "processing"`，需在 10–15 秒後帶 `{ fileKey, jobId }` 再呼叫。產出檔案有保存期限（預設 1 小時）
 
 ---
 

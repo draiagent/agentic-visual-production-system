@@ -24,6 +24,7 @@
 - [輸出格式](#輸出格式)
 - [延伸文件](#延伸文件)
 - [版本紀錄](#版本紀錄)
+- [授權](#授權)
 
 ---
 
@@ -69,10 +70,14 @@ AI 生成視覺素材與原型
 Claude Design / Presentation Agent
         │
         ├─ Figma MCP
-        │    ├─ get_design_context        → 理解 Layout／Component／結構（支援 Figma Design + Figma Make）
-        │    ├─ get_variable_defs         → 讀取 Color／Typography／Spacing（支援 Figma Design）
-        │    ├─ search_design_system      → 搜尋既有 Components／Styles／Variables
-        │    └─ create_design_system_rules → 引導 Agent 建立可持續遵循的 Design Rules（Prompt，非讀取工具）
+        │    ├─ get_libraries             → 列出可用 Library，取得 library key
+        │    ├─ search_design_system      → 搜尋既有 Components／Styles／Variables（一次一個意圖）
+        │    ├─ get_design_context        → 理解 Layout／Component／結構（四種檔案型別皆支援）
+        │    ├─ get_variable_defs         → 讀取 Color／Typography／Spacing（僅 /design/）
+        │    ├─ use_figma                 → 寫回 Figma 畫布
+        │    ├─ download_assets           → 匯出 PNG／PDF／SVG
+        │    ├─ export_video              → 匯出 MP4
+        │    └─ create_design_system_rules → 引導 Agent 建立可持續遵循的 Design Rules（Prompt，非工具）
         │
         ↓
 Visual Skill Layer
@@ -81,6 +86,8 @@ Visual Skill Layer
         ├─ stepclear-tutorial-glass（企業教學步驟卡）
         ├─ penta-glass-listcard（五色玻璃多分類清單卡）
         ├─ dual-brand-glassmorphism（雙品牌玻璃質感：藍版學術 / 橘版自媒體）
+        ├─ graph-infographic-brand（吉祥物白板教學圖卡）
+        ├─ premium-commerce-ui-brand（電商產品介面）
         ├─ Presentation Skill（簡報骨架與敘事結構）
         └─ Motion Skill（動畫節奏與轉場語言）
         ↓
@@ -96,7 +103,7 @@ QA Agent
 輸出
    ┌──────┼────────┬────────┐
    ↓      ↓        ↓        ↓
- PPTX    PDF      PNG      動畫影片 → MP4 / Shorts
+ PPTX    PDF      PNG      動畫影片 → MP4
 ```
 
 > 完整技術架構與資料流細節見 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)。
@@ -117,13 +124,13 @@ QA Agent
 ## 完整生產流程
 
 1. **素材蒐集**：照片、Logo、品牌色、字體、圖示、插圖、既有版型
-2. **Figma Make 生成**：針對缺口素材，用 AI 生成視覺素材與原型
+2. **Figma Make 生成**：針對缺口素材，用 AI 生成視覺素材與原型（⚠ Make 檔案幾乎唯讀，素材必須搬進 Design 檔案 Agent 才能用）
 3. **歸入 Figma Library**：整理進正式的 Figma Design 檔案，建立結構化素材倉庫
 4. **Visual Retrieval Agent 檢索**：接到任務後，先搜尋 Library 而非直接生成（見下節）
 5. **Claude Design Agent 組版**：理解內容屬性 → 選擇對應 Skill → 找素材 → 組版
 6. **寫回 Figma**：透過 MCP 建立／修改投影片、圖卡、流程圖、動畫畫面
 7. **QA Agent 審核**：語言、品牌一致性、版面、色彩、字體、圖像、動畫節奏
-8. **輸出**：PPTX／PDF／PNG／動畫影片（MP4/Shorts）
+8. **輸出**：PNG／PDF 走 `download_assets`，MP4 走 `export_video`，PPTX 由 Figma Slides 介面匯出
 9. **回存 Library**：優秀版本回存 Figma Library，供下次直接檢索重用（學習閉環）
 
 ---
@@ -225,17 +232,30 @@ QA 審核
 
 ## Figma MCP 工具對照表
 
-| 工具 | 類型 | 支援範圍 | 用途 |
-|------|------|---------|------|
-| `get_design_context` | 讀取 | Figma Design + Figma Make | 理解 Layout／Component／結構 |
-| `get_variable_defs` | 讀取 | Figma Design | 讀取 Color／Typography／Spacing |
-| `search_design_system` | 讀取 | Figma Design | 搜尋既有 Components／Styles／Variables |
-| `get_motion_context` | 讀取 | Figma Design | 取得動畫 selection 的 keyframe／easing／motion code |
-| `create_design_system_rules` | Prompt（非讀取工具） | — | 引導 Agent 建立可持續遵循的 Design Rules |
-| `use_figma` | 寫入 | Figma Design / FigJam / Slides | 建立或修改原生 Figma 物件 |
-| `generate_diagram` | 寫入 | FigJam | 用 Mermaid 語法生成流程圖 |
+| 工具 | 類型 | 用途 |
+|------|------|------|
+| `get_libraries` | 讀取 | 列出已訂閱／可加入的 Library，取得 library key 供縮小搜尋範圍 |
+| `search_design_system` | 讀取 | 搜尋既有 Components／Styles／Variables。**一次只能表達一個搜尋意圖** |
+| `get_design_context` | 讀取 | 理解 Layout／Component／結構，回傳參考程式碼與截圖 |
+| `get_variable_defs` | 讀取 | 讀取 Color／Typography／Spacing（**僅 `/design/` 檔案**） |
+| `get_metadata` | 讀取 | 節點/頁面概觀。官方建議優先用 `get_design_context` |
+| `get_screenshot` | 讀取 | 產生節點截圖 |
+| `get_motion_context` | 讀取 | 取得動畫 keyframe／easing／motion code |
+| `whoami` | 讀取 | 取得 planKey，新建檔案前置作業 |
+| `use_figma` | 寫入 | 建立或修改原生 Figma 物件，組版主力 |
+| `create_new_file` | 寫入 | 建立空白 design／figjam／slides 檔案 |
+| `upload_assets` | 寫入 | 上傳圖片與 SVG 進 Figma |
+| `download_assets` | 匯出 | 匯出 PNG／JPG／SVG／PDF |
+| `export_video` | 匯出 | 將 timeline 節點算繪為 MP4 |
+| `generate_diagram` | 寫入 | 用 Mermaid 語法在 FigJam 生成圖表 |
+| `create_design_system_rules` | Prompt | 引導 Agent 建立可持續遵循的 Design Rules（非工具） |
 
-> 完整工具規格與官方文件連結見 [`docs/MCP-TOOLS.md`](docs/MCP-TOOLS.md)。
+**兩個必須先知道的邊界**：
+
+- **Figma Make 幾乎唯讀** —— 只有 `get_design_context` 支援 `/make/` 檔案，`get_variable_defs`、`get_metadata`、`download_assets`、`use_figma` 全都不支援。所以流程第 2 步生成的素材**必須先搬進 Figma Design 檔案**，Agent 才能檢索與改寫。
+- **`export_video` 只出 MP4**，不支援 GIF 或動畫 SVG，且 nodeId 必須是擁有 timeline 的頂層 frame（在 Slides 裡是投影片本身）。算繪為非同步作業，需輪詢 `jobId`。
+
+> 完整檔案類型支援矩陣、工具限制與調用順序見 [`docs/MCP-TOOLS.md`](docs/MCP-TOOLS.md)。
 
 ---
 
@@ -270,12 +290,12 @@ QA 審核
 
 ## 輸出格式
 
-| 格式 | 用途 |
-|------|------|
-| **PPTX** | 課程簡報、公開教學 |
-| **PDF** | 衛教教材、論文附件 |
-| **PNG** | IG／TikTok 圖卡、單張海報 |
-| **MP4 / Shorts** | 短影音、動畫版教材 |
+| 格式 | 用途 | 匯出方式 |
+|------|------|---------|
+| **PPTX** | 課程簡報、公開教學 | Figma Slides 介面匯出（MCP 無對應工具） |
+| **PDF** | 衛教教材、論文附件 | `download_assets`（`defaultFormat: pdf`） |
+| **PNG** | IG／TikTok 圖卡、單張海報 | `download_assets`（`defaultFormat: png`） |
+| **MP4** | 短影音、動畫版教材 | `export_video`（**僅 MP4，不支援 GIF**） |
 
 ---
 

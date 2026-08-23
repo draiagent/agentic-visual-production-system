@@ -17,8 +17,10 @@
 │ ← Visual Skill Layer（設計治理）               │
 ├─────────────────────────────────────────────┤
 │ Layer 2：橋接層 Bridge Layer                  │
-│ Figma MCP：讀取（context/variables/search）    │
-│            寫入（use_figma/generate_diagram） │
+│ Figma MCP：讀取（libraries/search/context/    │
+│                  variables/motion）           │
+│            寫入（use_figma/upload/diagram）    │
+│            匯出（download_assets/export_video）│
 ├─────────────────────────────────────────────┤
 │ Layer 1：記憶層 Memory Layer                  │
 │ Figma Library：素材／版型／元件／品牌資產       │
@@ -48,7 +50,7 @@
       │
       ▼
 [Visual Retrieval Agent]
-      │  search_design_system
+      │  get_libraries → search_design_system(query, fileKey)
       ▼
 [Figma Library 是否已有可用素材？]
       │
@@ -75,7 +77,7 @@
   通過   不通過 → 打回 Claude Design Agent 修正
    │
    ▼
-[輸出 PPTX/PDF/PNG/MP4]
+[輸出 PPTX/PDF/PNG（download_assets）｜MP4（export_video）]
       │
       ▼
 [優秀版本回存 Figma Library]（學習閉環）
@@ -117,7 +119,10 @@
 ```text
 輸入：任務描述 + 內容屬性
 
-1. search_design_system(query) → 搜尋既有 Components/Styles/Variables
+0. get_libraries(fileKey) → 取得可用 Library 的 library key
+1. search_design_system(query, fileKey) → 搜尋既有 Components/Styles/Variables
+   ⚠ fileKey 為必填；每次查詢只能表達「一個」搜尋意圖，
+     不可把 Logo/人物/版型合併成一句，需拆成多次呼叫
 2. 逐項判斷：
    - 完全符合需求 → Reuse（直接引用）
    - 部分符合，需微調 → Modify（在既有基礎上修改）
@@ -159,9 +164,28 @@ qa_checklist:
 
 ## 技術邊界與已知限制
 
+### 檔案類型支援（最容易踩到的邊界）
+
+| 工具 | `/design/` | `/slides/` | `/board/` | `/make/` |
+|------|:---:|:---:|:---:|:---:|
+| `get_design_context` | ✅ | ✅ | ✅ | ✅（nodeId 固定 `0:1`） |
+| `get_variable_defs` | ✅ | ❌ | ❌ | ❌ |
+| `get_metadata` | ✅ | ❌ | ❌ | ❌ |
+| `download_assets` / `get_screenshot` | ✅ | ✅ | ✅ | ❌ |
+| `use_figma` / `upload_assets` | ✅ | ✅ | ✅ | ❌ |
+| `generate_diagram` | ❌ | ❌ | ✅ | ❌ |
+
+**Figma Make 幾乎是唯讀的死路**：只有 `get_design_context` 讀得到它。流程第 2 步用 Figma Make 生成的素材，**必須先搬進 Figma Design 檔案**，Agent 才有辦法檢索、改寫、匯出。這是硬限制，不是流程選擇。
+
+**Slides 讀不到 Design Token**：`get_variable_defs` 只吃 `/design/` URL。簡報若直接做在 Figma Slides，色票／字體／間距得從 Design 檔案的 Library 讀。
+
+### 其他限制
+
 | 項目 | 說明 |
 |------|------|
-| `get_variable_defs` | 目前僅支援 Figma Design 檔案，不支援 Figma Make |
-| `get_design_context` | 支援 Figma Design 與 Figma Make 兩者 |
-| `create_design_system_rules` | 本質是 MCP 提供的 Prompt，用來引導 Agent 產出規則文件，並非直接讀取 Figma 資料的工具，須與 `get_design_context`/`get_variable_defs` 的實際輸出搭配使用 |
-| Remote vs Desktop MCP | Remote MCP Server（`https://mcp.figma.com/mcp`）功能範圍最廣，為建議首選；Desktop MCP Server 主要用於企業/組織特定場景 |
+| `search_design_system` | `fileKey` 必填；**每次查詢只能表達一個搜尋意圖**，不做 OR 語意，替代方案需拆成多次呼叫 |
+| `create_design_system_rules` | 本質是 MCP 提供的 Prompt，用來引導 Agent 產出規則文件，並非直接讀取 Figma 資料的工具，須與 `get_design_context`／`get_variable_defs` 的實際輸出搭配使用 |
+| `export_video` | 只出 MP4，不支援 GIF／動畫 SVG；nodeId 必須是擁有 timeline 的**頂層 frame**（Slides 裡是投影片本身）；非同步作業，未完成會回 `jobId` 需輪詢；產出檔案有保存期限（預設 1 小時） |
+| `generate_diagram` | 僅支援 graph／flowchart／sequenceDiagram／stateDiagram／gantt／erDiagram，**不支援** class diagram／timeline／venn；不能改字體或搬移個別形狀 |
+| `use_figma` | `Inter` 字重寫法是 `Semi Bold`／`Extra Bold`（有空格）；換頁須用 `await figma.setCurrentPageAsync(page)`；`loadAllPagesAsync`／`setPluginData`／`createImageAsync` 不支援 |
+| Remote vs Desktop MCP | 本系統主要工具（`search_design_system`／`use_figma`／`create_new_file`／`get_libraries`／`download_assets`／`upload_assets`）皆為 **remote only**，Desktop server 不提供。Remote（`https://mcp.figma.com/mcp`）為必選 |
