@@ -2,7 +2,7 @@
 
 ### Figma Visual Memory × Claude Design Agent × MCP × Visual Skills × VAD
 
-一套將 **Figma 素材庫**、**Claude 設計代理**、**Model Context Protocol（MCP）**、**視覺技能層（Visual Skills）**與 **Visual Agent Design（VAD）方法論**整合為單一生產線的系統架構——用來將教材、大綱、品牌素材自動轉化為投影片、圖卡與動畫影片。
+一套將 **Figma 素材庫**、**Claude 設計代理**、**Model Context Protocol（MCP）**、視覺技能層（Visual Skills）與 **Visual Agent Design（VAD）方法論**整合為單一生產線的系統架構——用來將教材、大綱、品牌素材自動轉化為投影片、圖卡與動畫影片。
 
 > 本系統是 [VAD（Visual Agent Design）](https://github.com/draiagent/VAD-Promptless) 方法論在「視覺內容生產」場景下的具體執行層。VAD 定義藍圖，本系統負責落地執行。
 
